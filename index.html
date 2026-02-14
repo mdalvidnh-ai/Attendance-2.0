@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>SAT V1.0 - Student Attendance Tracker</title>
+    <link rel="manifest" href="manifest.json">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://unpkg.com/dexie@3.2.4/dist/dexie.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.1/jspdf.plugin.autotable.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700&display=swap" rel="stylesheet">
+    
+    <style>
+        :root { --brand-primary: #1e3a8a; --brand-secondary: #eab308; }
+        body { font-family: 'Poppins', sans-serif; transition: all 0.3s; }
+        .daily-header { background: linear-gradient(135deg, var(--brand-primary), #1e40af); }
+        .monthly-header { background: linear-gradient(135deg, #334155, var(--brand-primary)); }
+        .student-card { border-left-width: 6px; }
+        .border-male { border-left-color: #3b82f6; }
+        .border-female { border-left-color: #ec4899; }
+        .sticky-col { position: sticky; left: 0; z-index: 10; background: white; border-right: 1px solid #e2e8f0; }
+        .dark-mode { background-color: #0f172a; color: white; }
+        .dark-mode .bg-white { background-color: #1e293b !important; color: white; }
+        .dark-mode .sticky-col { background-color: #1e293b !important; }
+        .tab-content { display: none; }
+        .active-tab { display: block; }
+    </style>
+</head>
+<body class="bg-gray-100 text-slate-800 pb-24">
+
+    <div id="daily-tab" class="tab-content active-tab">
+        <header class="daily-header text-white p-6 rounded-b-3xl shadow-lg">
+            <div class="flex justify-between items-center">
+                <div>
+                    <h1 class="text-3xl font-bold italic">SAT V1.0</h1>
+                    <p class="text-[11px] tracking-widest opacity-80 uppercase">Student App</p>
+                </div>
+                <button onclick="toggleTheme()" class="text-2xl p-2"><i class="fas fa-moon"></i></button>
+            </div>
+            <input type="date" id="date-picker" onchange="renderDailyList()" class="w-full mt-6 p-3 rounded-xl text-black text-center font-bold">
+            <div class="grid grid-cols-2 gap-4 mt-6 text-center">
+                <div class="bg-white/10 p-3 rounded-xl backdrop-blur-md border border-white/20">
+                    <p class="text-[10px]">P: <span id="stat-bp">0</span> M | <span id="stat-gp">0</span> F</p>
+                    <p class="font-bold">TOTAL P: <span id="stat-cp">0</span></p>
+                </div>
+                <div class="bg-white/10 p-3 rounded-xl backdrop-blur-md border border-white/20">
+                    <p class="text-[10px]">A: <span id="stat-ba">0</span> M | <span id="stat-ga">0</span> F</p>
+                    <p class="font-bold text-yellow-300">TOTAL A: <span id="stat-ca">0</span></p>
+                </div>
+            </div>
+        </header>
+        
+        <div class="p-4 flex gap-4">
+            <button onclick="markAll('present')" class="flex-1 bg-white text-blue-800 font-bold py-3 rounded-xl shadow-sm border">MARK ALL P</button>
+            <button onclick="markAll('absent')" class="flex-1 bg-white text-blue-800 font-bold py-3 rounded-xl shadow-sm border">MARK ALL A</button>
+        </div>
+
+        <div id="student-list" class="p-4 space-y-4"></div>
+    </div>
+
+    <div id="monthly-tab" class="tab-content">
+        <header class="monthly-header text-white p-6 shadow-lg">
+            <h1 class="text-xl font-bold">Monthly Report</h1>
+            <div class="grid grid-cols-3 gap-2 mt-4">
+                <input type="month" id="month-select" onchange="renderMonthlyTable()" class="text-black p-2 rounded text-xs font-bold">
+                <input type="number" id="holiday-input" placeholder="Holidays" onchange="renderMonthlyTable()" class="text-black p-2 rounded text-xs">
+                <input type="number" id="prev-month-input" placeholder="Prev P" onchange="renderMonthlyTable()" class="text-black p-2 rounded text-xs">
+            </div>
+            <div class="flex gap-2 mt-4">
+                <button onclick="exportExcel()" class="bg-green-600 p-2 rounded flex-1 text-xs font-bold"><i class="fas fa-file-excel mr-1"></i> EXCEL</button>
+                <button onclick="exportToPDF()" class="bg-red-600 p-2 rounded flex-1 text-xs font-bold"><i class="fas fa-file-pdf mr-1"></i> PDF</button>
+            </div>
+        </header>
+        <div class="overflow-x-auto bg-white">
+            <table class="w-full text-[10px] border-collapse" id="attendance-table">
+                <thead id="table-head" class="bg-gray-50 border-b"></thead>
+                <tbody id="table-body"></tbody>
+            </table>
+        </div>
+    </div>
+
+    <div id="setup-tab" class="tab-content p-6">
+        <h2 class="text-2xl font-bold mb-6">Setup & Tools</h2>
+        
+        <div class="bg-white p-4 rounded-2xl shadow-sm border mb-6">
+            <label class="block text-sm font-bold mb-2">Import Class List</label>
+            <input type="file" id="file-upload" onchange="handleFileUpload(event)" class="w-full border-2 border-dashed p-4 rounded-xl">
+            <p class="text-[10px] text-gray-500 mt-2 italic">Requires: Roll No, Name, Gender</p>
+        </div>
+
+        <div class="grid grid-cols-2 gap-4 mb-6">
+            <button onclick="exportBackup()" class="bg-blue-50 text-blue-700 font-bold py-4 rounded-xl border border-blue-100">
+                <i class="fas fa-download mb-1 block"></i> BACKUP
+            </button>
+            <label class="bg-green-50 text-green-700 font-bold py-4 rounded-xl border border-green-100 text-center cursor-pointer">
+                <i class="fas fa-upload mb-1 block"></i> RESTORE
+                <input type="file" id="restore-input" onchange="importBackup(event)" class="hidden">
+            </label>
+        </div>
+
+        <button id="install-btn" class="hidden w-full bg-yellow-400 text-blue-900 font-bold py-4 rounded-xl mb-4 shadow-md">
+            INSTALL SAT V1.0
+        </button>
+
+        <button onclick="clearAllData()" class="w-full bg-red-50 text-red-600 font-bold py-4 rounded-xl border border-red-100">
+            CLEAR ALL DATABASE
+        </button>
+    </div>
+
+    <nav class="fixed bottom-0 left-0 right-0 bg-white border-t flex justify-around py-3 shadow-lg z-50">
+        <button onclick="switchTab('daily')" class="nav-btn flex flex-col items-center text-blue-800" data-tab="daily">
+            <i class="fas fa-calendar-day text-xl"></i><span class="text-[10px] font-bold">Daily</span>
+        </button>
+        <button onclick="switchTab('monthly')" class="nav-btn flex flex-col items-center text-gray-400" data-tab="monthly">
+            <i class="fas fa-table text-xl"></i><span class="text-[10px] font-bold">Monthly</span>
+        </button>
+        <button onclick="switchTab('setup')" class="nav-btn flex flex-col items-center text-gray-400" data-tab="setup">
+            <i class="fas fa-cog text-xl"></i><span class="text-[10px] font-bold">Setup</span>
+        </button>
+    </nav>
+
+    <script>
+        // DB SCHEMA
+        const db = new Dexie("SAT_DB");
+        db.version(3).stores({
+            students: '++id, rollNo, name, gender',
+            attendance: '++id, [date+rollNo], date, rollNo, status'
+        });
+
+        let deferredPrompt;
+
+        // INITIALIZATION
+        document.addEventListener('DOMContentLoaded', () => {
+            document.getElementById('date-picker').valueAsDate = new Date();
+            const now = new Date();
+            document.getElementById('month-select').value = `${now.getFullYear()}-${(now.getMonth()+1).toString().padStart(2,'0')}`;
+            renderDailyList();
+            registerSW();
+        });
+
+        // TAB SWITCHER
+        function switchTab(tabId) {
+            document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active-tab'));
+            document.getElementById(`${tabId}-tab`).classList.add('active-tab');
+            document.querySelectorAll('.nav-btn').forEach(b => b.classList.replace('text-blue-800', 'text-gray-400'));
+            document.querySelector(`[data-tab="${tabId}"]`).classList.replace('text-gray-400', 'text-blue-800');
+            if(tabId === 'daily') renderDailyList();
+            if(tabId === 'monthly') renderMonthlyTable();
+        }
+
+        // DAILY LIST LOGIC
+        async function renderDailyList() {
+            const date = document.getElementById('date-picker').value;
+            const students = await db.students.toArray();
+            students.sort((a, b) => parseInt(a.rollNo) - parseInt(b.rollNo));
+
+            const container = document.getElementById('student-list');
+            container.innerHTML = '';
+            let stats = { bp:0, gp:0, ba:0, ga:0 };
+
+            for (let s of students) {
+                const att = await db.attendance.get({ date, rollNo: s.rollNo });
+                const status = att ? att.status : '';
+                
+                if(status === 'present') s.gender.toLowerCase().startsWith('m') ? stats.bp++ : stats.gp++;
+                if(status === 'absent') s.gender.toLowerCase().startsWith('m') ? stats.ba++ : stats.ga++;
+
+                const div = document.createElement('div');
+                div.className = `student-card bg-white p-4 rounded-2xl shadow-sm border border-gray-100 border-${s.gender.toLowerCase().startsWith('m') ? 'male' : 'female'}`;
+                div.innerHTML = `
+                    <div class="flex justify-between items-center">
+                        <div>
+                            <p class="font-bold">${s.rollNo}. ${s.name}</p>
+                            <p class="text-[10px] text-gray-500 uppercase">${s.gender}</p>
+                        </div>
+                        <div class="flex gap-2">
+                            <button onclick="updateAtt('${s.rollNo}', 'present')" class="w-12 h-12 rounded-xl border-2 font-bold ${status==='present' ? 'bg-green-500 text-white border-green-500':'bg-gray-50'}">P</button>
+                            <button onclick="updateAtt('${s.rollNo}', 'absent')" class="w-12 h-12 rounded-xl border-2 font-bold ${status==='absent' ? 'bg-red-500 text-white border-red-500':'bg-gray-50'}">A</button>
+                        </div>
+                    </div>
+                `;
+                container.appendChild(div);
+            }
+            document.getElementById('stat-bp').innerText = stats.bp;
+            document.getElementById('stat-gp').innerText = stats.gp;
+            document.getElementById('stat-cp').innerText = stats.bp + stats.gp;
+            document.getElementById('stat-ba').innerText = stats.ba;
+            document.getElementById('stat-ga').innerText = stats.ga;
+            document.getElementById('stat-ca').innerText = stats.ba + stats.ga;
+        }
+
+        async function updateAtt(rollNo, status) {
+            const scroll = window.scrollY;
+            const date = document.getElementById('date-picker').value;
+            const existing = await db.attendance.get({ date, rollNo });
+            if(existing) await db.attendance.update(existing.id, { status });
+            else await db.attendance.add({ date, rollNo, status });
+            await renderDailyList();
+            window.scrollTo(0, scroll);
+        }
+
+        async function markAll(status) {
+            const date = document.getElementById('date-picker').value;
+            const students = await db.students.toArray();
+            for(let s of students) {
+                const existing = await db.attendance.get({ date, rollNo: s.rollNo });
+                if(existing) await db.attendance.update(existing.id, { status });
+                else await db.attendance.add({ date, rollNo, status });
+            }
+            renderDailyList();
+        }
+
+        // MONTHLY LOGIC
+        async function renderMonthlyTable() {
+            const monthVal = document.getElementById('month-select').value;
+            const [year, month] = monthVal.split('-');
+            const daysInMonth = new Date(year, month, 0).getDate();
+            const students = await db.students.toArray();
+            students.sort((a, b) => parseInt(a.rollNo) - parseInt(b.rollNo));
+
+            let headHtml = `<tr><th class="sticky-col px-2 py-2">Roll & Name</th>`;
+            for(let i=1; i<=daysInMonth; i++) headHtml += `<th class="px-1 border">${i}</th>`;
+            headHtml += `<th class="px-2 bg-blue-50">P</th><th class="px-2 bg-red-50">A</th></tr>`;
+            document.getElementById('table-head').innerHTML = headHtml;
+
+            let bodyHtml = '';
+            for(let s of students) {
+                let pCount = 0, aCount = 0;
+                bodyHtml += `<tr class="border-b"><td class="sticky-col px-2 py-2 font-bold">${s.rollNo}. ${s.name}</td>`;
+                for(let d=1; d<=daysInMonth; d++) {
+                    const dStr = `${year}-${month}-${d.toString().padStart(2,'0')}`;
+                    const att = await db.attendance.get({ date: dStr, rollNo: s.rollNo });
+                    const char = att ? (att.status === 'present' ? 'P' : 'A') : '-';
+                    if(char === 'P') pCount++; if(char === 'A') aCount++;
+                    const color = char==='P' ? 'text-green-600' : (char==='A' ? 'text-red-600' : 'text-gray-300');
+                    bodyHtml += `<td class="text-center border ${color}">${char}</td>`;
+                }
+                bodyHtml += `<td class="text-center bg-blue-50 font-bold">${pCount}</td><td class="text-center bg-red-50 font-bold">${aCount}</td></tr>`;
+            }
+            document.getElementById('table-body').innerHTML = bodyHtml;
+        }
+
+        // EXPORT PDF
+        async function exportToPDF() {
+            const { jsPDF } = window.jspdf;
+            const doc = new jsPDF('l', 'mm', 'a4');
+            doc.text(`Attendance Report: ${document.getElementById('month-select').value}`, 14, 10);
+            doc.autoTable({ html: '#attendance-table', startY: 15, styles: {fontSize: 6}, theme: 'grid' });
+            doc.save(`SAT_Report_${document.getElementById('month-select').value}.pdf`);
+        }
+
+        // EXCEL IMPORT
+        async function handleFileUpload(e) {
+            const file = e.target.files[0];
+            const reader = new FileReader();
+            reader.onload = async (evt) => {
+                const workbook = XLSX.read(evt.target.result, { type: 'binary' });
+                const data = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]]);
+                const formatted = data.map(r => ({
+                    rollNo: (r['Roll No'] || r['roll'] || r['RNo'] || '').toString(),
+                    name: (r['Student Name'] || r['name'] || '').toUpperCase(),
+                    gender: (r['Gender'] || r['sex'] || 'Male')
+                }));
+                await db.students.clear();
+                await db.students.bulkAdd(formatted);
+                alert("Import Complete!");
+                renderDailyList();
+            };
+            reader.readAsBinaryString(file);
+        }
+
+        // BACKUP & RESTORE
+        async function exportBackup() {
+            const data = { students: await db.students.toArray(), attendance: await db.attendance.toArray() };
+            const blob = new Blob([JSON.stringify(data)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `SAT_Backup_${new Date().toISOString().split('T')[0]}.json`;
+            a.click();
+        }
+
+        async function importBackup(e) {
+            const file = e.target.files[0];
+            const reader = new FileReader();
+            reader.onload = async (evt) => {
+                const data = JSON.parse(evt.target.result);
+                await db.students.clear(); await db.attendance.clear();
+                await db.students.bulkAdd(data.students); await db.attendance.bulkAdd(data.attendance);
+                alert("Restored!"); location.reload();
+            };
+            reader.readAsText(file);
+        }
+
+        async function clearAllData() {
+            if(confirm("Delete EVERYTHING?")) {
+                await db.students.clear(); await db.attendance.clear();
+                location.reload();
+            }
+        }
+
+        function toggleTheme() { document.body.classList.toggle('dark-mode'); }
+
+        // PWA REGISTRATION
+        function registerSW() {
+            if ('serviceWorker' in navigator) {
+                navigator.serviceWorker.register('sw.js');
+            }
+        }
+
+        window.addEventListener('beforeinstallprompt', (e) => {
+            e.preventDefault(); deferredPrompt = e;
+            document.getElementById('install-btn').classList.remove('hidden');
+        });
+
+        document.getElementById('install-btn').addEventListener('click', () => {
+            deferredPrompt.prompt();
+            document.getElementById('install-btn').classList.add('hidden');
+        });
+    </script>
+</body>
+</html>
