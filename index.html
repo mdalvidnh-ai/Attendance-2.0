@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>SAT V1.0 - Student Attendance Tracker</title>
+    <title>SAT V2.0 - Student Attendance Tracker</title>
     <link rel="manifest" href="manifest.json">
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
@@ -35,7 +35,7 @@
         <header class="daily-header text-white p-6 rounded-b-3xl shadow-lg">
             <div class="flex justify-between items-center">
                 <div>
-                    <h1 class="text-3xl font-bold italic">SAT V1.0</h1>
+                    <h1 class="text-3xl font-bold italic">SAT V2.0</h1>
                     <p class="text-[11px] tracking-widest opacity-80 uppercase">Student App</p>
                 </div>
                 <button onclick="toggleTheme()" class="text-2xl p-2"><i class="fas fa-moon"></i></button>
@@ -66,8 +66,8 @@
             <h1 class="text-xl font-bold">Monthly Report</h1>
             <div class="grid grid-cols-3 gap-2 mt-4">
                 <input type="month" id="month-select" onchange="renderMonthlyTable()" class="text-black p-2 rounded text-xs font-bold">
-                <input type="number" id="holiday-input" placeholder="Holidays" onchange="renderMonthlyTable()" class="text-black p-2 rounded text-xs">
-                <input type="number" id="prev-month-input" placeholder="Prev P" onchange="renderMonthlyTable()" class="text-black p-2 rounded text-xs">
+                <input type="number" id="holiday-input" value="0" onchange="renderMonthlyTable()" class="text-black p-2 rounded text-xs">
+                <input type="number" id="prev-month-input" value="0" onchange="renderMonthlyTable()" class="text-black p-2 rounded text-xs">
             </div>
             <div class="flex gap-2 mt-4">
                 <button onclick="exportExcel()" class="bg-green-600 p-2 rounded flex-1 text-xs font-bold"><i class="fas fa-file-excel mr-1"></i> EXCEL</button>
@@ -84,30 +84,20 @@
 
     <div id="setup-tab" class="tab-content p-6">
         <h2 class="text-2xl font-bold mb-6">Setup & Tools</h2>
-        
         <div class="bg-white p-4 rounded-2xl shadow-sm border mb-6">
-            <label class="block text-sm font-bold mb-2">Import Class List</label>
-            <input type="file" id="file-upload" onchange="handleFileUpload(event)" class="w-full border-2 border-dashed p-4 rounded-xl">
-            <p class="text-[10px] text-gray-500 mt-2 italic">Requires: Roll No, Name, Gender</p>
+            <label class="block text-sm font-bold mb-2">Import Class List (Excel/CSV)</label>
+            <input type="file" id="file-upload" accept=".xlsx, .xls, .csv" onchange="handleFileUpload(event)" class="w-full border-2 border-dashed p-4 rounded-xl">
+            <p class="text-[10px] text-gray-500 mt-2 italic">Format: Roll No | Student Name | Gender</p>
         </div>
 
         <div class="grid grid-cols-2 gap-4 mb-6">
-            <button onclick="exportBackup()" class="bg-blue-50 text-blue-700 font-bold py-4 rounded-xl border border-blue-100">
-                <i class="fas fa-download mb-1 block"></i> BACKUP
-            </button>
+            <button onclick="exportBackup()" class="bg-blue-50 text-blue-700 font-bold py-4 rounded-xl border border-blue-100">BACKUP</button>
             <label class="bg-green-50 text-green-700 font-bold py-4 rounded-xl border border-green-100 text-center cursor-pointer">
-                <i class="fas fa-upload mb-1 block"></i> RESTORE
-                <input type="file" id="restore-input" onchange="importBackup(event)" class="hidden">
+                RESTORE <input type="file" id="restore-input" onchange="importBackup(event)" class="hidden">
             </label>
         </div>
-
-        <button id="install-btn" class="hidden w-full bg-yellow-400 text-blue-900 font-bold py-4 rounded-xl mb-4 shadow-md">
-            INSTALL SAT V1.0
-        </button>
-
-        <button onclick="clearAllData()" class="w-full bg-red-50 text-red-600 font-bold py-4 rounded-xl border border-red-100">
-            CLEAR ALL DATABASE
-        </button>
+        <button id="install-btn" class="hidden w-full bg-yellow-400 text-blue-900 font-bold py-4 rounded-xl mb-4">INSTALL APP</button>
+        <button onclick="clearAllData()" class="w-full bg-red-50 text-red-600 font-bold py-4 rounded-xl border border-red-100">CLEAR ALL DATABASE</button>
     </div>
 
     <nav class="fixed bottom-0 left-0 right-0 bg-white border-t flex justify-around py-3 shadow-lg z-50">
@@ -123,25 +113,19 @@
     </nav>
 
     <script>
-        // DB SCHEMA
         const db = new Dexie("SAT_DB");
         db.version(3).stores({
             students: '++id, rollNo, name, gender',
             attendance: '++id, [date+rollNo], date, rollNo, status'
         });
 
-        let deferredPrompt;
-
-        // INITIALIZATION
         document.addEventListener('DOMContentLoaded', () => {
             document.getElementById('date-picker').valueAsDate = new Date();
             const now = new Date();
             document.getElementById('month-select').value = `${now.getFullYear()}-${(now.getMonth()+1).toString().padStart(2,'0')}`;
             renderDailyList();
-            registerSW();
         });
 
-        // TAB SWITCHER
         function switchTab(tabId) {
             document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active-tab'));
             document.getElementById(`${tabId}-tab`).classList.add('active-tab');
@@ -151,12 +135,10 @@
             if(tabId === 'monthly') renderMonthlyTable();
         }
 
-        // DAILY LIST LOGIC
         async function renderDailyList() {
             const date = document.getElementById('date-picker').value;
             const students = await db.students.toArray();
             students.sort((a, b) => parseInt(a.rollNo) - parseInt(b.rollNo));
-
             const container = document.getElementById('student-list');
             container.innerHTML = '';
             let stats = { bp:0, gp:0, ba:0, ga:0 };
@@ -164,7 +146,6 @@
             for (let s of students) {
                 const att = await db.attendance.get({ date, rollNo: s.rollNo });
                 const status = att ? att.status : '';
-                
                 if(status === 'present') s.gender.toLowerCase().startsWith('m') ? stats.bp++ : stats.gp++;
                 if(status === 'absent') s.gender.toLowerCase().startsWith('m') ? stats.ba++ : stats.ga++;
 
@@ -172,34 +153,26 @@
                 div.className = `student-card bg-white p-4 rounded-2xl shadow-sm border border-gray-100 border-${s.gender.toLowerCase().startsWith('m') ? 'male' : 'female'}`;
                 div.innerHTML = `
                     <div class="flex justify-between items-center">
-                        <div>
-                            <p class="font-bold">${s.rollNo}. ${s.name}</p>
-                            <p class="text-[10px] text-gray-500 uppercase">${s.gender}</p>
-                        </div>
+                        <div><p class="font-bold">${s.rollNo}. ${s.name}</p><p class="text-[10px] text-gray-500 uppercase">${s.gender}</p></div>
                         <div class="flex gap-2">
-                            <button onclick="updateAtt('${s.rollNo}', 'present')" class="w-12 h-12 rounded-xl border-2 font-bold ${status==='present' ? 'bg-green-500 text-white border-green-500':'bg-gray-50'}">P</button>
-                            <button onclick="updateAtt('${s.rollNo}', 'absent')" class="w-12 h-12 rounded-xl border-2 font-bold ${status==='absent' ? 'bg-red-500 text-white border-red-500':'bg-gray-50'}">A</button>
+                            <button onclick="event.stopPropagation(); updateAtt('${s.rollNo}', 'present')" class="w-12 h-12 rounded-xl border-2 font-bold ${status==='present' ? 'bg-green-500 text-white border-green-500':'bg-gray-50'}">P</button>
+                            <button onclick="event.stopPropagation(); updateAtt('${s.rollNo}', 'absent')" class="w-12 h-12 rounded-xl border-2 font-bold ${status==='absent' ? 'bg-red-500 text-white border-red-500':'bg-gray-50'}">A</button>
                         </div>
-                    </div>
-                `;
+                    </div>`;
                 container.appendChild(div);
             }
-            document.getElementById('stat-bp').innerText = stats.bp;
-            document.getElementById('stat-gp').innerText = stats.gp;
+            document.getElementById('stat-bp').innerText = stats.bp; document.getElementById('stat-gp').innerText = stats.gp;
             document.getElementById('stat-cp').innerText = stats.bp + stats.gp;
-            document.getElementById('stat-ba').innerText = stats.ba;
-            document.getElementById('stat-ga').innerText = stats.ga;
+            document.getElementById('stat-ba').innerText = stats.ba; document.getElementById('stat-ga').innerText = stats.ga;
             document.getElementById('stat-ca').innerText = stats.ba + stats.ga;
         }
 
         async function updateAtt(rollNo, status) {
-            const scroll = window.scrollY;
             const date = document.getElementById('date-picker').value;
             const existing = await db.attendance.get({ date, rollNo });
             if(existing) await db.attendance.update(existing.id, { status });
             else await db.attendance.add({ date, rollNo, status });
-            await renderDailyList();
-            window.scrollTo(0, scroll);
+            renderDailyList();
         }
 
         async function markAll(status) {
@@ -213,7 +186,36 @@
             renderDailyList();
         }
 
-        // MONTHLY LOGIC
+        async function handleFileUpload(e) {
+            const file = e.target.files[0];
+            const reader = new FileReader();
+            reader.onload = async (evt) => {
+                const bstr = evt.target.result;
+                const workbook = XLSX.read(bstr, { type: 'binary' });
+                const worksheet = workbook.Sheets[workbook.SheetNames[0]];
+                const data = XLSX.utils.sheet_to_json(worksheet);
+                
+                const formatted = data.map(r => {
+                    // Robust fuzzy header matching
+                    const getVal = (keys) => {
+                        const found = Object.keys(r).find(k => keys.includes(k.toLowerCase().replace(/\s/g, '')));
+                        return r[found] || "";
+                    };
+                    return {
+                        rollNo: getVal(['rollno', 'roll', 'rno', 'id']).toString(),
+                        name: getVal(['studentname', 'name', 'sname', 'fullname']).toString().toUpperCase(),
+                        gender: getVal(['gender', 'sex', 'g']).toString() || 'Male'
+                    };
+                }).filter(s => s.name && s.rollNo);
+
+                await db.students.clear();
+                await db.students.bulkAdd(formatted);
+                alert(`Imported ${formatted.length} students!`);
+                renderDailyList();
+            };
+            reader.readAsBinaryString(file);
+        }
+
         async function renderMonthlyTable() {
             const monthVal = document.getElementById('month-select').value;
             const [year, month] = monthVal.split('-');
@@ -228,98 +230,54 @@
 
             let bodyHtml = '';
             for(let s of students) {
-                let pCount = 0, aCount = 0;
+                let p = 0, a = 0;
                 bodyHtml += `<tr class="border-b"><td class="sticky-col px-2 py-2 font-bold">${s.rollNo}. ${s.name}</td>`;
                 for(let d=1; d<=daysInMonth; d++) {
-                    const dStr = `${year}-${month}-${d.toString().padStart(2,'0')}`;
-                    const att = await db.attendance.get({ date: dStr, rollNo: s.rollNo });
-                    const char = att ? (att.status === 'present' ? 'P' : 'A') : '-';
-                    if(char === 'P') pCount++; if(char === 'A') aCount++;
-                    const color = char==='P' ? 'text-green-600' : (char==='A' ? 'text-red-600' : 'text-gray-300');
-                    bodyHtml += `<td class="text-center border ${color}">${char}</td>`;
+                    const date = `${year}-${month}-${d.toString().padStart(2,'0')}`;
+                    const att = await db.attendance.get({ date, rollNo: s.rollNo });
+                    const status = att ? (att.status === 'present' ? 'P' : 'A') : '-';
+                    if(status === 'P') p++; if(status === 'A') a++;
+                    bodyHtml += `<td class="text-center border ${status==='P'?'text-green-600':status==='A'?'text-red-600':'text-gray-300'}">${status}</td>`;
                 }
-                bodyHtml += `<td class="text-center bg-blue-50 font-bold">${pCount}</td><td class="text-center bg-red-50 font-bold">${aCount}</td></tr>`;
+                bodyHtml += `<td class="text-center bg-blue-50 font-bold">${p}</td><td class="text-center bg-red-50 font-bold">${a}</td></tr>`;
             }
             document.getElementById('table-body').innerHTML = bodyHtml;
         }
 
-        // EXPORT PDF
-        async function exportToPDF() {
+        function exportExcel() {
+            const table = document.getElementById("attendance-table");
+            const wb = XLSX.utils.table_to_book(table);
+            XLSX.writeFile(wb, `Attendance_${document.getElementById('month-select').value}.xlsx`);
+        }
+
+        function exportToPDF() {
             const { jsPDF } = window.jspdf;
             const doc = new jsPDF('l', 'mm', 'a4');
-            doc.text(`Attendance Report: ${document.getElementById('month-select').value}`, 14, 10);
-            doc.autoTable({ html: '#attendance-table', startY: 15, styles: {fontSize: 6}, theme: 'grid' });
-            doc.save(`SAT_Report_${document.getElementById('month-select').value}.pdf`);
+            doc.text(`Monthly Attendance: ${document.getElementById('month-select').value}`, 10, 10);
+            doc.autoTable({ html: '#attendance-table', startY: 15, theme: 'grid', styles: { fontSize: 5 } });
+            doc.save('Attendance_Report.pdf');
         }
 
-        // EXCEL IMPORT
-        async function handleFileUpload(e) {
-            const file = e.target.files[0];
-            const reader = new FileReader();
-            reader.onload = async (evt) => {
-                const workbook = XLSX.read(evt.target.result, { type: 'binary' });
-                const data = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]]);
-                const formatted = data.map(r => ({
-                    rollNo: (r['Roll No'] || r['roll'] || r['RNo'] || '').toString(),
-                    name: (r['Student Name'] || r['name'] || '').toUpperCase(),
-                    gender: (r['Gender'] || r['sex'] || 'Male')
-                }));
-                await db.students.clear();
-                await db.students.bulkAdd(formatted);
-                alert("Import Complete!");
-                renderDailyList();
-            };
-            reader.readAsBinaryString(file);
-        }
-
-        // BACKUP & RESTORE
         async function exportBackup() {
             const data = { students: await db.students.toArray(), attendance: await db.attendance.toArray() };
             const blob = new Blob([JSON.stringify(data)], { type: 'application/json' });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `SAT_Backup_${new Date().toISOString().split('T')[0]}.json`;
-            a.click();
+            const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+            a.download = `Backup_${new Date().toISOString().split('T')[0]}.json`; a.click();
         }
 
         async function importBackup(e) {
-            const file = e.target.files[0];
             const reader = new FileReader();
             reader.onload = async (evt) => {
                 const data = JSON.parse(evt.target.result);
                 await db.students.clear(); await db.attendance.clear();
                 await db.students.bulkAdd(data.students); await db.attendance.bulkAdd(data.attendance);
-                alert("Restored!"); location.reload();
-            };
-            reader.readAsText(file);
-        }
-
-        async function clearAllData() {
-            if(confirm("Delete EVERYTHING?")) {
-                await db.students.clear(); await db.attendance.clear();
                 location.reload();
-            }
+            };
+            reader.readAsText(e.target.files[0]);
         }
 
+        async function clearAllData() { if(confirm("Clear database?")) { await db.students.clear(); await db.attendance.clear(); location.reload(); } }
         function toggleTheme() { document.body.classList.toggle('dark-mode'); }
-
-        // PWA REGISTRATION
-        function registerSW() {
-            if ('serviceWorker' in navigator) {
-                navigator.serviceWorker.register('sw.js');
-            }
-        }
-
-        window.addEventListener('beforeinstallprompt', (e) => {
-            e.preventDefault(); deferredPrompt = e;
-            document.getElementById('install-btn').classList.remove('hidden');
-        });
-
-        document.getElementById('install-btn').addEventListener('click', () => {
-            deferredPrompt.prompt();
-            document.getElementById('install-btn').classList.add('hidden');
-        });
     </script>
 </body>
 </html>
